@@ -28,6 +28,9 @@ from darts.models.forecasting.tft_submodels import (
     _VariableSelectionNetwork,
     get_embedding_size,
 )
+from darts.models.forecasting.tft_ssm_submodel import (
+    _MambaBlock
+)
 from darts.models.forecasting.torch_forecasting_model import MixedCovariatesTorchModel
 from darts.utils.data import TorchTrainingDataset
 from darts.utils.data.torch_datasets.utils import PLModuleInput, TorchTrainingSample
@@ -35,8 +38,9 @@ from darts.utils.likelihood_models.torch import QuantileRegression, TorchLikelih
 
 logger = get_logger(__name__)
 
+print(f"Importing custom TFT Module")
 
-class _TFTModule(PLForecastingModule):
+class _TFTSSMModule(PLForecastingModule):
     def __init__(
         self,
         output_dim: tuple[int, int],
@@ -104,7 +108,7 @@ class _TFTModule(PLForecastingModule):
             all parameters required for :class:`darts.models.forecasting.pl_forecasting_module.PLForecastingModule`
             base class.
         """
-        logger.error("Original _TFT_Module initialized... why?")
+
         super().__init__(**kwargs)
 
         self.n_targets, self.loss_size = output_dim
@@ -132,7 +136,7 @@ class _TFTModule(PLForecastingModule):
 
         # initialize last batch size to check if new mask needs to be generated
         self.batch_size_last = -1
-        self.attention_mask = None
+        # self.attention_mask = None #NOTE: remove attention mask
         self.relative_index = None
 
         # general information on variable name endings:
@@ -274,6 +278,8 @@ class _TFTModule(PLForecastingModule):
             input_size=self.hidden_size, dropout=dropout, layer_norm=self.layer_norm
         )
 
+        # NOTE: WITHIN TFD
+        # NOTE: keep this
         # static enrichment and processing past LSTM
         self.static_enrichment_grn = _GatedResidualNetwork(
             input_size=self.hidden_size,
@@ -284,12 +290,24 @@ class _TFTModule(PLForecastingModule):
             layer_norm=self.layer_norm,
         )
 
-        # attention for long-range processing
-        self.multihead_attn = _InterpretableMultiHeadAttention(
+        # attention for long-range processing # NOTE:Remove
+        """self.multihead_attn = _InterpretableMultiHeadAttention(
             d_model=self.hidden_size,
             n_head=self.num_attention_heads,
             dropout=self.dropout,
+        )"""
+
+        self.mamba = _MambaBlock(
+            d_model=self.hidden_size,
+            d_state=64,
+            expand=2,
+            d_conv=4,
+            conv_bias=True,
+            bias=False
         )
+
+        # NOTE: Second layer of TFD
+        # NOTE: 
         self.post_attn_gan = _GateAddNorm(
             self.hidden_size, dropout=self.dropout, layer_norm=self.layer_norm
         )
@@ -313,6 +331,7 @@ class _TFTModule(PLForecastingModule):
                 d_model=self.hidden_size, d_ff=self.hidden_size * 4, dropout=dropout
             )
 
+        # NOTE: First layer outside of TFD, accepts skip from before TFD
         # output processing -> no dropout at this late stage
         self.pre_output_gan = _GateAddNorm(
             self.hidden_size, dropout=None, layer_norm=self.layer_norm
@@ -470,13 +489,14 @@ class _TFTModule(PLForecastingModule):
 
         # avoid unnecessary regeneration of attention mask
         if batch_size != self.batch_size_last:
-            self.attention_mask = self.get_attention_mask_future(
+            #NOTE: Remove attention mask
+            """self.attention_mask = self.get_attention_mask_future(
                 encoder_length=encoder_length,
                 decoder_length=decoder_length,
                 batch_size=batch_size,
                 device=device,
                 full_attention=self.full_attention,
-            )
+            )"""
             if self.add_relative_index:
                 self.relative_index = self.get_relative_index(
                     encoder_length=encoder_length,
@@ -599,6 +619,7 @@ class _TFTModule(PLForecastingModule):
         # post lstm GateAddNorm
         lstm_out = self.post_lstm_gan(x=lstm_layer, skip=input_embeddings)
 
+        # NOTE: inisde temporal fusion decoder
         # static enrichment
         static_context_enriched = self.static_context_enrichment(static_embedding)
         attn_input = self.static_enrichment_grn(
@@ -608,20 +629,23 @@ class _TFTModule(PLForecastingModule):
             ),
         )
 
-        # multi-head attention
-        attn_out, attn_out_weights = self.multihead_attn(
+        # multi-head attention # NOTE Remove
+        """attn_out, attn_out_weights = self.multihead_attn(
             q=attn_input[:, encoder_length:],
             k=attn_input,
             v=attn_input,
             mask=self.attention_mask,
+        )"""
+
+        attn_out = self.mamba(
+            x=attn_input[:, encoder_length:]
         )
 
-        #print(f"ATTENTION OUT SIZE: {attn_out.shape}")
 
         # skip connection over attention
         attn_out = self.post_attn_gan(
             x=attn_out,
-            skip=attn_input[:, encoder_length:],
+            skip=attn_input[:, encoder_length:], # NOTE: This is the skip connection
         )
 
         # feed-forward
@@ -638,14 +662,14 @@ class _TFTModule(PLForecastingModule):
         out = out.view(
             batch_size, self.output_chunk_length, self.n_targets, self.loss_size
         )
-        self._attn_out_weights = attn_out_weights
+        #self._attn_out_weights = attn_out_weights
         self._static_covariate_var = static_covariate_var
         self._encoder_sparse_weights = encoder_sparse_weights
         self._decoder_sparse_weights = decoder_sparse_weights
         return out
 
 
-class TFTModel(MixedCovariatesTorchModel):
+class TFTSSMModel(MixedCovariatesTorchModel):
     def __init__(
         self,
         input_chunk_length: int,
@@ -929,7 +953,6 @@ class TFTModel(MixedCovariatesTorchModel):
             `TFT example notebook <https://unit8co.github.io/darts/examples/13-TFT-examples.html>`_ presents
             techniques that can be used to improve the forecasts quality compared to this simple usage example.
         """
-        logger.error("Original TFT Model initialized... why?")
         model_kwargs = {key: val for key, val in self.model_params.items()}
         if likelihood is None and loss_fn is None:
             # This is the default if no loss information is provided
@@ -1132,7 +1155,7 @@ class TFTModel(MixedCovariatesTorchModel):
 
         self.categorical_embedding_sizes = categorical_embedding_sizes
 
-        return _TFTModule(
+        return _TFTSSMModule(
             output_dim=self.output_dim,
             variables_meta=variables_meta,
             num_static_components=n_static_components,

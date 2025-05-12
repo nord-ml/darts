@@ -267,6 +267,8 @@ class _AddNorm(nn.Module):
         if self.trainable_add:
             skip = skip * self.gate(self.mask) * 2.0
 
+        #print(f"x: {x.shape}")
+        #print(f"skip: {skip.shape}")
         output = self.norm(x + skip)
         return output
 

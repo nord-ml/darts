@@ -53,6 +53,7 @@ try:
     from darts.models.forecasting.rnn_model import RNNModel
     from darts.models.forecasting.tcn_model import TCNModel
     from darts.models.forecasting.tft_model import TFTModel
+    from darts.models.forecasting.tft_ssm_model import TFTSSMModel
     from darts.models.forecasting.tide_model import TiDEModel
     from darts.models.forecasting.transformer_model import TransformerModel
     from darts.models.forecasting.tsmixer_model import TSMixerModel
@@ -73,6 +74,7 @@ except ModuleNotFoundError:
     RNNModel = NotImportedModule(module_name="(Py)Torch", warn=False)
     TCNModel = NotImportedModule(module_name="(Py)Torch", warn=False)
     TFTModel = NotImportedModule(module_name="(Py)Torch", warn=False)
+    TFTSSMModel = NotImportedModule(module_name="(Py)Torch", warn=False)
     TiDEModel = NotImportedModule(module_name="(Py)Torch", warn=False)
     TransformerModel = NotImportedModule(module_name="(Py)Torch", warn=False)
     TSMixerModel = NotImportedModule(module_name="(Py)Torch", warn=False)
@@ -156,6 +158,7 @@ __all__ = [
     "RNNModel",
     "TCNModel",
     "TFTModel",
+    "TFTSSMModel",
     "TiDEModel",
     "TransformerModel",
     "TSMixerModel",
