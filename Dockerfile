@@ -8,11 +8,14 @@ RUN pip install -r /app/requirements/dev-all.txt
 # copy local files
 COPY . /app
 
+RUN pip install optuna optuna-integration[pytorch-lightning]
+
 # set work directory
 WORKDIR /app
 
 # install darts
 RUN pip install -e .
+
 
 # assuming you are working from inside your darts directory:
 # docker build . -t darts-test:latest
