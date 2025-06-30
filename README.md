@@ -5,6 +5,25 @@
 3. open AML folder and there are our experiments
 
 
+# How to run the expetiments and everything?
+1) open the terminal
+2) to run the evaulation (hyperparam finetuning, it works currently for all models)
+- Number of trials is how many experiments can be run (easier to run 1 for testing)
+```bash
+python AML/train.py {model_name} --n-trials {n_trials}
+```
+
+3) Evaulate
+- evaulation is done on best models for each architecture
+```bash
+python AML/evaulate.py {model_name} 
+```
+
+# current available models
+`tft` and `prophet`
+
+
+
 
 # What do we exactly do?
 - We take an TFT with covariates and train it simple right?
@@ -23,3 +42,5 @@ Which covaraites do we define? -> month days and holidays in switzerland
 
 # Adam Comments
 - One epoch on my device for TFT takes 10 minutes - no GPU
+
+
