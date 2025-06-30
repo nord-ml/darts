@@ -4,6 +4,7 @@ import argparse
 import os
 import json
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from data_pipeline import ElectricityDataPipeline
 from models_config import MODEL_CONFIGS
@@ -35,7 +36,7 @@ def run_evaluation(model_name: str, results_dir: str):
     # 2. Prepare Data
     data_pipeline = ElectricityDataPipeline(
         target_component=TARGET_COMPONENT,
-        subset_percentage=0.05,
+        subset_percentage=0.01,
     )
     data_pipeline.prepare_data()
 
@@ -62,6 +63,29 @@ def run_evaluation(model_name: str, results_dir: str):
         n=len(data_pipeline.test_scaled),
         covariates_scaled=data_pipeline.covariates_scaled
     )
+
+     # 5. Generate and Save Forecast Plot --- NEW STEP ---
+    print("Generating and saving forecast plot...")
+    
+    # Use the unscaled series for plotting in the original data's units
+    actual_test_unscaled = data_pipeline.test
+    pred_unscaled = data_pipeline.scaler_target.inverse_transform(pred)
+
+    plt.figure(figsize=(12, 6))
+    actual_test_unscaled.plot(label="Actual", lw=2)
+    # Darts' plot function automatically handles probabilistic forecasts (showing confidence intervals)
+    pred_unscaled.plot(label="Forecast") 
+
+    plt.title(f"Final Forecast vs Actuals on Test Set ({model_name})")
+    plt.xlabel("Date")
+    plt.ylabel(f"Electricity Consumption ({data_pipeline.target_component})")
+    plt.legend()
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+
+    plot_path = os.path.join(run_dir, "test_set_forecast.png")
+    plt.savefig(plot_path)
+    plt.close()  # Important to free up memory after saving
+    print(f"Forecast plot saved to {plot_path}")
 
     # 5. Calculate and Report Metrics
     test_smape = smape(data_pipeline.test_scaled, pred)

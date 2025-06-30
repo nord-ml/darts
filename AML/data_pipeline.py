@@ -31,9 +31,6 @@ class ElectricityDataPipeline:
             "Hr [%Hr]", "RainDur [min]", "T [°C]", "WD [°]",
             "WVv [m/s]", "p [hPa]", "WVs [m/s]", "StrGlo [W/m2]"
         ]
-        # Add the *other* electricity value as a covariate as well
-        other_target = [t for t in self.potential_targets if t != self.target_component][0]
-        self.data_covariate_cols.append(other_target)
 
         # Initialize all other attributes
         self.series = None
