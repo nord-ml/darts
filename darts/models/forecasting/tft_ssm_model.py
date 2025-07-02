@@ -38,7 +38,15 @@ from darts.utils.likelihood_models.torch import QuantileRegression, TorchLikelih
 
 logger = get_logger(__name__)
 
-print(f"Importing custom TFT Module")
+try:
+    from mamba_ssm import Mamba, Mamba2, MambaLMHeadModel
+    import mamba_ssm
+    mamba_native_failed=False
+except Exception as e:
+    logger.error("pip package mamba-ssm not installed, remember to set mamba_native=False")
+    mamba_native_failed=True
+
+logger.info(f"Importing custom TFT Module")
 
 class _TFTSSMModule(PLForecastingModule):
     def __init__(
@@ -56,6 +64,7 @@ class _TFTSSMModule(PLForecastingModule):
         dropout: float,
         add_relative_index: bool,
         norm_type: Union[str, nn.Module],
+        mamba_native: bool,
         **kwargs,
     ):
         """PyTorch module implementing the TFT architecture from `this paper <https://arxiv.org/pdf/1912.09363.pdf>`_
@@ -123,6 +132,11 @@ class _TFTSSMModule(PLForecastingModule):
         self.feed_forward = feed_forward
         self.dropout = dropout
         self.add_relative_index = add_relative_index
+        if mamba_native_failed:
+            self.mamba_native = False
+            logger.warning("Ignoring mamba_native=True... mamba-ssm package could not be imported")
+        else:
+            self.mamba_native = mamba_native
 
         if isinstance(norm_type, str):
             try:
@@ -297,14 +311,24 @@ class _TFTSSMModule(PLForecastingModule):
             dropout=self.dropout,
         )"""
 
-        self.mamba = _MambaBlock(
-            d_model=self.hidden_size,
-            d_state=64,
-            expand=2,
-            d_conv=4,
-            conv_bias=True,
-            bias=False
-        )
+        if self.mamba_native:
+            self.mamba = Mamba2(
+                d_model=self.hidden_size,
+                d_state=64,
+                expand=2,
+                d_conv=4,
+                conv_bias=True,
+                bias=False,
+            )
+        else:
+            self.mamba = _MambaBlock(
+                d_model=self.hidden_size,
+                d_state=64,
+                expand=2,
+                d_conv=4,
+                conv_bias=True,
+                bias=False
+            )
 
         # NOTE: Second layer of TFD
         # NOTE: 
@@ -637,9 +661,16 @@ class _TFTSSMModule(PLForecastingModule):
             mask=self.attention_mask,
         )"""
 
-        attn_out = self.mamba(
-            x=attn_input[:, encoder_length:]
-        )
+        if not self.mamba_native:
+            attn_out = self.mamba(
+                x=attn_input[:, encoder_length:]
+            )
+        else:
+            #if isinstance(self.mamba, mamba_ssm.Mamba) or isinstance(self.mamba, mamba_ssm.Mamba2):
+            # datatype is not by default Float | Half | BFloat16 
+            attn_out = self.mamba(attn_input[:, encoder_length:])
+        
+            
 
 
         # skip connection over attention
@@ -690,6 +721,7 @@ class TFTSSMModel(MixedCovariatesTorchModel):
         likelihood: Optional[TorchLikelihood] = None,
         norm_type: Union[str, nn.Module] = "LayerNorm",
         use_static_covariates: bool = True,
+        mamba_native:bool = False,
         **kwargs,
     ):
         """Temporal Fusion Transformers (TFT) for Interpretable Time Series Forecasting.
@@ -964,6 +996,7 @@ class TFTSSMModel(MixedCovariatesTorchModel):
         # extract pytorch lightning module kwargs
         self.pl_module_params = self._extract_pl_module_params(**model_kwargs)
 
+        self.mamba_native = mamba_native
         self.hidden_size = hidden_size
         self.lstm_layers = lstm_layers
         self.num_attention_heads = num_attention_heads
@@ -1169,6 +1202,7 @@ class TFTSSMModel(MixedCovariatesTorchModel):
             categorical_embedding_sizes=self.categorical_embedding_sizes,
             add_relative_index=self.add_relative_index,
             norm_type=self.norm_type,
+            mamba_native=self.mamba_native,
             **self.pl_module_params,
         )
 
