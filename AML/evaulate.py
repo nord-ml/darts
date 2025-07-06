@@ -1,4 +1,6 @@
 # src/evaluate.py
+from utils import fix_pythonpath_if_working_locally
+fix_pythonpath_if_working_locally()
 
 import argparse
 import os
@@ -8,10 +10,8 @@ import matplotlib.pyplot as plt
 
 from data_pipeline import ElectricityDataPipeline
 from models_config import MODEL_CONFIGS
-from utils.utils import fix_pythonpath_if_working_locally
 from darts.metrics import smape
 
-fix_pythonpath_if_working_locally()
 TARGET_COMPONENT = "Value_NE5"  # Default target component for evaluation
 
 def run_evaluation(model_name: str, results_dir: str):
@@ -36,22 +36,24 @@ def run_evaluation(model_name: str, results_dir: str):
     # 2. Prepare Data
     data_pipeline = ElectricityDataPipeline(
         target_component=TARGET_COMPONENT,
-        subset_percentage=0.01,
     )
+
     data_pipeline.prepare_data()
 
     # Combine train and validation sets for final training
     final_train_series = data_pipeline.train_scaled.append(data_pipeline.val_scaled)
     final_covariates = data_pipeline.cov_train_scaled.append(data_pipeline.cov_val_scaled)
-    print(f"Combined train and val sets for final training. Length: {len(final_train_series)}")
+    print(f"Combined train and val sets for final training. Length: {len(final_train_series)} and {len(final_covariates)} covariates.")
 
     # 3. Instantiate and Train the Final Model using the generic fitter
     print("Training final model...")
     fit_function = config["fit_model"]
     final_model, training_time = fit_function(
         params=best_params,
+        data_pipeline=data_pipeline,
         train_series=final_train_series,
-        future_covariates=final_covariates
+        past_covariates=final_covariates,
+        future_covariates=data_pipeline.future_covariates_scaled
     )
     print(f"Final model training took: {training_time:.2f} seconds.")
 
@@ -60,8 +62,9 @@ def run_evaluation(model_name: str, results_dir: str):
     predict_function = config["predict_model"]
     pred = predict_function(
         model=final_model,
-        n=len(data_pipeline.test_scaled),
-        covariates_scaled=data_pipeline.covariates_scaled
+        n=data_pipeline.forecast_horizon,
+        # past_covariates=data_pipeline.cov_test_scaled #?? Do we need them there?
+        future_covariates=data_pipeline.future_covariates_scaled,
     )
 
      # 5. Generate and Save Forecast Plot --- NEW STEP ---
@@ -69,7 +72,7 @@ def run_evaluation(model_name: str, results_dir: str):
     
     # Use the unscaled series for plotting in the original data's units
     actual_test_unscaled = data_pipeline.test
-    pred_unscaled = data_pipeline.scaler_target.inverse_transform(pred)
+    pred_unscaled = data_pipeline.target_scaler.inverse_transform(pred)
 
     plt.figure(figsize=(12, 6))
     actual_test_unscaled.plot(label="Actual", lw=2)
@@ -102,11 +105,11 @@ def run_evaluation(model_name: str, results_dir: str):
     evaluation_report = {
         "model_name": model_name,
         "target_component": TARGET_COMPONENT,
-        "test_smape": test_smape,
-        "accuracy_rate": accuracy_rate,
-        "training_time_seconds": training_time,
-        "inverse_efficiency_score": ies,
-        "rate_correct_score": rcs,
+        "test_smape": float(test_smape),
+        "accuracy_rate": float(accuracy_rate),
+        "training_time_seconds": float(training_time),
+        "inverse_efficiency_score": float(ies),
+        "rate_correct_score": float(rcs),
         "best_hyperparameters": best_params
     }
     report_path = os.path.join(run_dir, "evaluation_report.json")

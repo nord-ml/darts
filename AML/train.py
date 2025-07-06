@@ -1,4 +1,7 @@
 # src/train.py
+from utils import fix_pythonpath_if_working_locally
+fix_pythonpath_if_working_locally()
+
 import argparse
 import os
 import json
@@ -8,10 +11,10 @@ import optuna
 
 from data_pipeline import ElectricityDataPipeline
 from models_config import MODEL_CONFIGS
-from utils import fix_pythonpath_if_working_locally
+
+
 
 # Set up project root
-fix_pythonpath_if_working_locally()
 TARGET_COMPONENT= "Value_NE5"
 
 def run_training(model_name: str, target_component: str, output_dir: str, n_trials: int):
@@ -29,7 +32,6 @@ def run_training(model_name: str, target_component: str, output_dir: str, n_tria
     # 2. Prepare Data
     data_pipeline = ElectricityDataPipeline(
         target_component=target_component,
-        subset_percentage=0.05,
     )
     data_pipeline.prepare_data()
 
@@ -76,6 +78,7 @@ def run_training(model_name: str, target_component: str, output_dir: str, n_tria
 
 
 if __name__ == "__main__":
+    fix_pythonpath_if_working_locally()
     parser = argparse.ArgumentParser(description="Run Hyperparameter Tuning")
     parser.add_argument("model_name", type=str, choices=MODEL_CONFIGS.keys(), help="The name of the model to tune.")
     parser.add_argument("--output-dir", type=str, default="results", help="Directory to save results.")

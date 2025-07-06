@@ -13,14 +13,21 @@
 python AML/train.py {model_name} --n-trials {n_trials}
 ```
 
+eg 
+```bash
+python AML/train.py tft --n-trials 1
+```
+
 3) Evaulate
 - evaulation is done on best models for each architecture
 ```bash
 python AML/evaulate.py {model_name} 
+eg
+python AML/evaulate.py tft
 ```
 
 # current available models
-`tft` and `prophet`
+`tft` , `ssm-tft` and `prophet`
 
 
 
@@ -41,6 +48,16 @@ Which covaraites do we define? -> month days and holidays in switzerland
 
 
 # Adam Comments
-- One epoch on my device for TFT takes 10 minutes - no GPU
+- Smape is infinity for my small samples, but might be issue of testing, needs definitely some tests!!
+- TFT - works for training/evaulation
 
 
+@ we have Train -> val -> test split ( i hope it is not test->val)
+
+
+# What we need to do
+- Add reasonable grid search for hyperparams on SSM! (approve that they are being reflected)
+
+
+# Some installs
+pip install einops
