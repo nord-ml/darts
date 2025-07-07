@@ -84,11 +84,35 @@ def _prophet_fitter(params, data_pipeline, train_series, past_covariates, future
     training_time = end_time - start_time
     return model, training_time
 
-def _default_predictor(model, n, future_covariates, ):
-    """Default prediction logic for most Darts models."""
-    return model.predict(n=n, 
-                         future_covariates=future_covariates)
+def _historical_predictor(
+    model, 
+    data_pipeline,
+):
+    """
+    Generic prediction logic using historical_forecasts for robust evaluation
+    on a test set. This is ideal for deep learning models.
+    """
+    
+    # We need to provide the full series history so the model can use data
+    # before the test set as input.
+    full_series = data_pipeline.train_scaled.append(data_pipeline.val_scaled).append(data_pipeline.test_scaled)
+    
+    # Similarly for covariates
+    full_past_covs = data_pipeline.cov_train_scaled.append(data_pipeline.cov_val_scaled).append(data_pipeline.cov_test_scaled)
 
+    # all full future covariates
+    full_future_covs = data_pipeline.future_covariates_scaled
+
+    return model.historical_forecasts(
+        series=full_series,
+        past_covariates=full_past_covs,
+        future_covariates=full_future_covs,
+        start=data_pipeline.test_scaled.start_time(),  # Start forecasting at the beginning of the test set
+        forecast_horizon=data_pipeline.forecast_horizon,
+        stride=data_pipeline.forecast_horizon,  # Creates non-overlapping forecasts
+        retrain=False,
+        verbose=True,
+    )
 # --- Objective Functions - for training ---
 
 def _tftssm_objective(trial, data_pipeline):
@@ -203,18 +227,18 @@ MODEL_CONFIGS = {
         "model_class": TFTModel,
         "objective": _tft_objective,
         "fit_model": _tft_fitter,         
-        "predict_model": _default_predictor
+        "predict_model": _historical_predictor
     },
     "prophet": {
         "model_class": Prophet,
         "objective": _prophet_objective,
         "fit_model": _prophet_fitter,     
-        "predict_model": _default_predictor
+        "predict_model": _historical_predictor
     },
     'ssm-tft': {
         "model_class": TFTSSMModel,
         "objective": _tftssm_objective,
         "fit_model": _tftssm_fitter,
-        "predict_model": _default_predictor
+        "predict_model": _historical_predictor
     }
 }

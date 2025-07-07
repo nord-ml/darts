@@ -57,14 +57,12 @@ def run_evaluation(model_name: str, results_dir: str):
     )
     print(f"Final model training took: {training_time:.2f} seconds.")
 
-    # 4. Evaluate on the Test Set using the generic predictor
-    print("Evaluating model on the test set...")
+    # 4. Evaluate on the With historical prediction -> part of the predict function
+    print("Evaluating model with backtesting.")
     predict_function = config["predict_model"]
     pred = predict_function(
         model=final_model,
-        n=data_pipeline.forecast_horizon,
-        # past_covariates=data_pipeline.cov_test_scaled #?? Do we need them there?
-        future_covariates=data_pipeline.future_covariates_scaled,
+        data_pipeline=data_pipeline,
     )
 
      # 5. Generate and Save Forecast Plot --- NEW STEP ---
