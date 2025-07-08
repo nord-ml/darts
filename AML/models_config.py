@@ -154,6 +154,7 @@ def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
         pl_trainer_kwargs={"callbacks": callbacks, "enable_progress_bar": True},
         random_state=42, force_reset=True, save_checkpoints=True, model_name=f"optuna_tftssm_{trial._trial_id}",
         output_chunk_length=data_pipeline.forecast_horizon,
+        log_tensorboard=True,
     )
 
 
@@ -166,7 +167,6 @@ def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
         val_past_covariates=data_pipeline.cov_val_scaled,
         val_future_covariates=data_pipeline.future_covariates_scaled,
         verbose=True,        
-        log_tensorboard=True,
     )
 
     best_model = TFTSSMModel.load_from_checkpoint(f"optuna_tftssm_{trial._trial_id}", best=True)
