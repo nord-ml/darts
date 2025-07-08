@@ -13,6 +13,7 @@ from darts.models import TFTSSMModel
 
 from darts.utils.likelihood_models import QuantileRegression
 from utils.utils import eval_model
+from data_pipeline import ElectricityDataPipeline
 
 # --- Reusable Helper Functions for this file ---
 
@@ -27,7 +28,7 @@ if NR_EPOCHS < 5:
     print("❗❗Warning: NR_EPOCHS is set to less than 5, this will not train the model properly. Please set it to a positive integer.❗❗")
 
 
-def _tftssm_fitter(params, data_pipeline, train_series, past_covariates, future_covariates):
+def _tftssm_fitter(params, data_pipeline:ElectricityDataPipeline, train_series, past_covariates, future_covariates):
     """Specific fitting logic for TFT model."""
 
     tftssm_kwargs = {
@@ -58,7 +59,7 @@ def _tftssm_fitter(params, data_pipeline, train_series, past_covariates, future_
     return model, training_time
 
 
-def _tft_fitter(params, data_pipeline, train_series, past_covariates, future_covariates):
+def _tft_fitter(params, data_pipeline:ElectricityDataPipeline, train_series, past_covariates, future_covariates):
     """Specific fitting logic for TFT model."""
 
     tft_kwargs = {
@@ -88,7 +89,7 @@ def _tft_fitter(params, data_pipeline, train_series, past_covariates, future_cov
     training_time = end_time - start_time
     return model, training_time
 
-def _prophet_fitter(params, data_pipeline, train_series, past_covariates, future_covariates):
+def _prophet_fitter(params, data_pipeline:ElectricityDataPipeline, train_series, past_covariates, future_covariates):
     """Specific fitting logic for Prophet model."""
     model = Prophet(**params)
     
@@ -132,7 +133,7 @@ def _historical_predictor(
     )
 # --- Objective Functions - for training ---
 
-def _tftssm_objective(trial, data_pipeline):
+def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
     # This function remains the same as before...
     in_len = trial.suggest_int("input_chunk_length", 12, 36)
     hidden_size = trial.suggest_categorical("hidden_size", [32, 64])
@@ -151,7 +152,7 @@ def _tftssm_objective(trial, data_pipeline):
         n_epochs=NR_EPOCHS, likelihood=QuantileRegression(),
         optimizer_kwargs={"lr": lr},
         pl_trainer_kwargs={"callbacks": callbacks, "enable_progress_bar": True},
-        random_state=42, force_reset=True, save_checkpoints=True, model_name="optuna_tft",
+        random_state=42, force_reset=True, save_checkpoints=True, model_name=f"optuna_tftssm_{trial._trial_id}",
         output_chunk_length=data_pipeline.forecast_horizon,
     )
 
@@ -164,14 +165,15 @@ def _tftssm_objective(trial, data_pipeline):
         val_series=data_pipeline.val_scaled,
         val_past_covariates=data_pipeline.cov_val_scaled,
         val_future_covariates=data_pipeline.future_covariates_scaled,
-        verbose=True
+        verbose=True,        
+        log_tensorboard=True,
     )
 
-    best_model = TFTSSMModel.load_from_checkpoint("optuna_tft", best=True)
+    best_model = TFTSSMModel.load_from_checkpoint(f"optuna_tftssm_{trial._trial_id}", best=True)
 
     return eval_model(
         model=best_model, 
-        n=data_pipeline.val_len, 
+        n=data_pipeline.forecast_horizon, 
         actual_series=data_pipeline.val_scaled,
         val_series=data_pipeline.val_scaled, 
         future_covariates=data_pipeline.future_covariates_scaled,
@@ -179,7 +181,7 @@ def _tftssm_objective(trial, data_pipeline):
     )
 
     
-def _tft_objective(trial, data_pipeline):
+def _tft_objective(trial, data_pipeline:ElectricityDataPipeline):
     # This function remains the same as before...
     in_len = trial.suggest_int("input_chunk_length", 12, 36)
     hidden_size = trial.suggest_categorical("hidden_size", [32, 64])
@@ -195,8 +197,9 @@ def _tft_objective(trial, data_pipeline):
         optimizer_kwargs={"lr": lr},
         n_epochs=NR_EPOCHS, likelihood=QuantileRegression(),
         pl_trainer_kwargs={"callbacks": callbacks, "enable_progress_bar": True},
-        random_state=42, force_reset=True, save_checkpoints=True, model_name="optuna_tft",
+        random_state=42, force_reset=True, save_checkpoints=True, model_name=f"optuna_tft_{trial._trial_id}",
         output_chunk_length=data_pipeline.forecast_horizon,  #do not search for best horizon just define it!
+        log_tensorboard=True,
     )
 
 
@@ -211,17 +214,17 @@ def _tft_objective(trial, data_pipeline):
         verbose=True
     )
 
-    best_model = TFTModel.load_from_checkpoint("optuna_tft", best=True)
+    best_model = TFTModel.load_from_checkpoint(f"optuna_tft_{trial._trial_id}", best=True)
 
     return eval_model(
-        model=best_model, n=data_pipeline.val_len, 
+        model=best_model, n=data_pipeline.forecast_horizon, 
         actual_series=data_pipeline.val_scaled,
         val_series=data_pipeline.val_scaled, 
         future_covariates=data_pipeline.future_covariates_scaled,
         past_covariates=data_pipeline.cov_val_scaled
     )
 
-def _prophet_objective(trial, data_pipeline):
+def _prophet_objective(trial, data_pipeline:ElectricityDataPipeline):
     # This function also remains the same...
     seasonality_mode = trial.suggest_categorical("seasonality_mode", ["additive", "multiplicative"])
     changepoint_prior_scale = trial.suggest_float("changepoint_prior_scale", 0.01, 0.5, log=True)
@@ -234,12 +237,12 @@ def _prophet_objective(trial, data_pipeline):
     )
     model.fit(series=data_pipeline.train_scaled, 
             #   past_covariates=data_pipeline.cov_train_scaled,
-              future_covariates=data_pipeline.future_covariates_scaled
+            future_covariates=data_pipeline.future_covariates_scaled,
         )
 
     # this is maybe no needed we evaulte them in separate step
     return eval_model(
-        model=model, n=data_pipeline.val_len, 
+        model=model, n=data_pipeline.forecast_horizon, 
         actual_series=data_pipeline.val_scaled,
         val_series=data_pipeline.val_scaled, 
         past_covariates=[], # no past covariates, cannot accept them

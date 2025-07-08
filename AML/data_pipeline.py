@@ -143,6 +143,8 @@ class ElectricityDataPipeline:
         total_len = len(self.series)
         train_size = int(total_len * self.train_percent)
         val_size = int(total_len * self.val_percent)
+        self.train_len = train_size
+        self.val_len = val_size
 
         train_end_time = self.series.time_index[train_size - 1]
         val_end_time = self.series.time_index[train_size + val_size - 1]
