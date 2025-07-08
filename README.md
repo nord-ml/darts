@@ -57,7 +57,10 @@ Which covaraites do we define? -> month days and holidays in switzerland
 
 # What we need to do
 - Add reasonable grid search for hyperparams on SSM! (approve that they are being reflected)
-
+- Mamba specific hyperparams
+  1. 1D convolution kernel: parameters that captures temporal dependencies, experimented on values [1, 2, 3]. Typically set on 2.
+  2. Hidden state dimension: controls overfitting and underfitting, tested within range of [2-256]. Dynamically determined by number of variates considered within data.
+  3. Expansion factor(controversal parameter): Differ from [1-32]. Only considered by some articles, refering to be 1, so that it may increase parameter size and GPU cost. However, the origianl mamba library and some articles set 16 as default.
 
 # Some installs
 `pip install einops`
