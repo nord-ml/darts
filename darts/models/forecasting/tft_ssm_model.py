@@ -56,8 +56,8 @@ class _TFTSSMModule(PLForecastingModule):
         num_static_components: int,
         hidden_size: Union[int, list[int]],
         lstm_layers: int,
-        num_attention_heads: int,
-        full_attention: bool,
+        # num_attention_heads: int,
+        # full_attention: bool,
         feed_forward: str,
         hidden_continuous_size: int,
         categorical_embedding_sizes: dict[str, tuple[int, int]],
@@ -65,6 +65,10 @@ class _TFTSSMModule(PLForecastingModule):
         add_relative_index: bool,
         norm_type: Union[str, nn.Module],
         mamba_native: bool,
+        # SSM specific
+        d_state: int,
+        expand: int,
+        d_conv: int,
         **kwargs,
     ):
         """PyTorch module implementing the TFT architecture from `this paper <https://arxiv.org/pdf/1912.09363.pdf>`_
@@ -127,8 +131,8 @@ class _TFTSSMModule(PLForecastingModule):
         self.hidden_continuous_size = hidden_continuous_size
         self.categorical_embedding_sizes = categorical_embedding_sizes
         self.lstm_layers = lstm_layers
-        self.num_attention_heads = num_attention_heads
-        self.full_attention = full_attention
+        # self.num_attention_heads = num_attention_heads
+        # self.full_attention = full_attention
         self.feed_forward = feed_forward
         self.dropout = dropout
         self.add_relative_index = add_relative_index
@@ -147,6 +151,11 @@ class _TFTSSMModule(PLForecastingModule):
                 )
         else:
             self.layer_norm = norm_type
+
+        # SSM specific
+        self.d_state = d_state if d_state is not None else 64
+        self.expand = expand if expand is not None else 2
+        self.d_conv = d_conv if d_conv is not None else 4
 
         # initialize last batch size to check if new mask needs to be generated
         self.batch_size_last = -1
@@ -314,18 +323,18 @@ class _TFTSSMModule(PLForecastingModule):
         if self.mamba_native:
             self.mamba = Mamba2(
                 d_model=self.hidden_size,
-                d_state=64,
-                expand=2,
-                d_conv=4,
+                d_state=self.d_state,
+                expand=self.expand,
+                d_conv=self.d_conv,
                 conv_bias=True,
                 bias=False,
             )
         else:
             self.mamba = _MambaBlock(
                 d_model=self.hidden_size,
-                d_state=64,
-                expand=2,
-                d_conv=4,
+                d_state=self.d_state,
+                expand=self.expand,
+                d_conv=self.d_conv,
                 conv_bias=True,
                 bias=False
             )
@@ -699,7 +708,6 @@ class _TFTSSMModule(PLForecastingModule):
         self._decoder_sparse_weights = decoder_sparse_weights
         return out
 
-
 class TFTSSMModel(MixedCovariatesTorchModel):
     def __init__(
         self,
@@ -708,8 +716,8 @@ class TFTSSMModel(MixedCovariatesTorchModel):
         output_chunk_shift: int = 0,
         hidden_size: Union[int, list[int]] = 16,
         lstm_layers: int = 1,
-        num_attention_heads: int = 4,
-        full_attention: bool = False,
+        # num_attention_heads: int = 4,
+        # full_attention: bool = False,
         feed_forward: str = "GatedResidualNetwork",
         dropout: float = 0.1,
         hidden_continuous_size: int = 8,
@@ -721,6 +729,9 @@ class TFTSSMModel(MixedCovariatesTorchModel):
         likelihood: Optional[TorchLikelihood] = None,
         norm_type: Union[str, nn.Module] = "LayerNorm",
         use_static_covariates: bool = True,
+        d_state: int = 64,
+        expand: int = 2,
+        d_conv: int = 4,
         mamba_native:bool = False,
         **kwargs,
     ):
@@ -985,12 +996,16 @@ class TFTSSMModel(MixedCovariatesTorchModel):
             `TFT example notebook <https://unit8co.github.io/darts/examples/13-TFT-examples.html>`_ presents
             techniques that can be used to improve the forecasts quality compared to this simple usage example.
         """
+        
+        # all_params = locals()
+        # all_params.update(all_params.pop("kwargs", {}))
         model_kwargs = {key: val for key, val in self.model_params.items()}
+        # model_kwargs = {k: v for k, v in all_params.items() if k not in ["self", "__class__"]}
         if likelihood is None and loss_fn is None:
             # This is the default if no loss information is provided
             model_kwargs["loss_fn"] = None
             model_kwargs["likelihood"] = QuantileRegression()
-
+        
         super().__init__(**self._extract_torch_model_params(**model_kwargs))
 
         # extract pytorch lightning module kwargs
@@ -999,8 +1014,8 @@ class TFTSSMModel(MixedCovariatesTorchModel):
         self.mamba_native = mamba_native
         self.hidden_size = hidden_size
         self.lstm_layers = lstm_layers
-        self.num_attention_heads = num_attention_heads
-        self.full_attention = full_attention
+        # self.num_attention_heads = num_attention_heads
+        # self.full_attention = full_attention
         self.feed_forward = feed_forward
         self.dropout = dropout
         self.hidden_continuous_size = hidden_continuous_size
@@ -1013,6 +1028,12 @@ class TFTSSMModel(MixedCovariatesTorchModel):
         self.output_dim: Optional[tuple[int, int]] = None
         self.norm_type = norm_type
         self._considers_static_covariates = use_static_covariates
+
+        # Onlyt SSM params
+        self.d_state = d_state if d_state is not None else 64
+        self.expand = expand if expand is not None else 2
+        self.d_conv = d_conv if d_conv is not None else 4
+
 
     def _create_model(self, train_sample: TorchTrainingSample) -> nn.Module:
         """
@@ -1195,14 +1216,18 @@ class TFTSSMModel(MixedCovariatesTorchModel):
             hidden_size=self.hidden_size,
             lstm_layers=self.lstm_layers,
             dropout=self.dropout,
-            num_attention_heads=self.num_attention_heads,
-            full_attention=self.full_attention,
+            # num_attention_heads=self.num_attention_heads,
+            # full_attention=self.full_attention,
             feed_forward=self.feed_forward,
             hidden_continuous_size=self.hidden_continuous_size,
             categorical_embedding_sizes=self.categorical_embedding_sizes,
             add_relative_index=self.add_relative_index,
             norm_type=self.norm_type,
             mamba_native=self.mamba_native,
+            # SSM model specifics
+            d_state=self.d_state,
+            expand=self.expand,
+            d_conv=self.d_conv,
             **self.pl_module_params,
         )
 

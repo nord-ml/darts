@@ -60,4 +60,7 @@ Which covaraites do we define? -> month days and holidays in switzerland
 
 
 # Some installs
-pip install einops
+`pip install einops`
+- you might encouter problems with smm models becaus ethe params are not passed
+you have to copy it into editable
+`cp /workspaces/darts/darts/models/forecasting/tft_ssm_model.py /app/darts/models/forecasting/tft_ssm_model.py`

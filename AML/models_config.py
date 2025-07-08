@@ -20,8 +20,8 @@ class PatchedPruningCallback(PyTorchLightningPruningCallback, Callback):
     pass
 
 #  ---- Fitters - used once we have trined the model
-# NR epochs
-NR_EPOCHS = 1
+# NR epochs for hyperparam finetuning and for fitting final model
+NR_EPOCHS = 1 #TODO ADAPT!
 
 
 def _tftssm_fitter(params, data_pipeline, train_series, past_covariates, future_covariates):
@@ -34,6 +34,13 @@ def _tftssm_fitter(params, data_pipeline, train_series, past_covariates, future_
         'force_reset': True,
         'output_chunk_length': data_pipeline.forecast_horizon,  # do not search for best horizon just define it!
     }
+
+    optimizer_kwargs = {}
+    if 'lr' in params:
+        optimizer_kwargs['lr'] = params['lr']
+        # remove lr from params
+        del params['lr']
+
     model = TFTSSMModel(**params, **tftssm_kwargs, likelihood=QuantileRegression())
     
     start_time = time.time()
@@ -58,8 +65,15 @@ def _tft_fitter(params, data_pipeline, train_series, past_covariates, future_cov
         'force_reset': True,
         'output_chunk_length': data_pipeline.forecast_horizon,  # do not search for best horizon just define it!
     }
-    model = TFTModel(**params, **tft_kwargs, likelihood=QuantileRegression())
-    
+
+    optimizer_kwargs = {}
+    if 'lr' in params:
+        optimizer_kwargs['lr'] = params['lr']
+        # remove lr from params
+        del params['lr']
+
+    model = TFTModel(**params, **tft_kwargs, optimizer_kwargs=optimizer_kwargs, likelihood=QuantileRegression())
+
     start_time = time.time()
     model.fit(
         series=train_series,
@@ -120,13 +134,19 @@ def _tftssm_objective(trial, data_pipeline):
     in_len = trial.suggest_int("input_chunk_length", 12, 36)
     hidden_size = trial.suggest_categorical("hidden_size", [32, 64])
     dropout = trial.suggest_float("dropout", 0.0, 0.3)
-    heads = trial.suggest_categorical("num_attention_heads", [1, 2, 4])
-    # lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    d_state = trial.suggest_int("d_state", 32, 128)
+    expand = trial.suggest_int("expand", 1, 4)
+    d_conv = trial.suggest_int("d_conv", 2, 8)
+    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+
     callbacks = [PatchedPruningCallback(trial, monitor="val_loss"), EarlyStopping("val_loss", patience=3, verbose=False)]
+    
     model = TFTSSMModel(
         input_chunk_length=in_len, hidden_size=hidden_size,
-        lstm_layers=1, num_attention_heads=heads, dropout=dropout, batch_size=32,
+        lstm_layers=1,  dropout=dropout, batch_size=32,
+        d_state=d_state, expand=expand, d_conv=d_conv,
         n_epochs=NR_EPOCHS, likelihood=QuantileRegression(),
+        optimizer_kwargs={"lr": lr},
         pl_trainer_kwargs={"callbacks": callbacks, "enable_progress_bar": True},
         random_state=42, force_reset=True, save_checkpoints=True, model_name="optuna_tft",
         output_chunk_length=data_pipeline.forecast_horizon,
@@ -162,11 +182,14 @@ def _tft_objective(trial, data_pipeline):
     hidden_size = trial.suggest_categorical("hidden_size", [32, 64])
     dropout = trial.suggest_float("dropout", 0.0, 0.3)
     heads = trial.suggest_categorical("num_attention_heads", [1, 2, 4])
-    # lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+
+
     callbacks = [PatchedPruningCallback(trial, monitor="val_loss"), EarlyStopping("val_loss", patience=3, verbose=False)]
     model = TFTModel(
         input_chunk_length=in_len,  hidden_size=hidden_size,
         lstm_layers=1, num_attention_heads=heads, dropout=dropout, batch_size=32,
+        optimizer_kwargs={"lr": lr},
         n_epochs=NR_EPOCHS, likelihood=QuantileRegression(),
         pl_trainer_kwargs={"callbacks": callbacks, "enable_progress_bar": True},
         random_state=42, force_reset=True, save_checkpoints=True, model_name="optuna_tft",
