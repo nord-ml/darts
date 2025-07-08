@@ -23,6 +23,9 @@ class PatchedPruningCallback(PyTorchLightningPruningCallback, Callback):
 # NR epochs for hyperparam finetuning and for fitting final model
 NR_EPOCHS = 1 #TODO ADAPT!
 
+if NR_EPOCHS < 5:
+    print("❗❗Warning: NR_EPOCHS is set to less than 5, this will not train the model properly. Please set it to a positive integer.❗❗")
+
 
 def _tftssm_fitter(params, data_pipeline, train_series, past_covariates, future_covariates):
     """Specific fitting logic for TFT model."""

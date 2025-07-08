@@ -9,6 +9,9 @@ from darts import TimeSeries
 from darts.datasets import ElectricityConsumptionZurichDataset
 from darts.dataprocessing.transformers import Scaler
 from darts.utils.timeseries_generation import datetime_attribute_timeseries
+from darts.logging import get_logger
+
+logger = get_logger(__name__)
 
 class ElectricityDataPipeline:
     def __init__(
@@ -30,6 +33,12 @@ class ElectricityDataPipeline:
                 f"Target must be one of {self.potential_targets}, but got {target_component}"
             )
         self.target_component = target_component
+        
+        if subset_percentage < 1.0:
+            logger.error(
+                f"❗❗Using subset_percentage < 1.0 ({subset_percentage}) for development purposes. "
+                "This will speed up the data loading and processing, but results may not be representative.❗❗"
+            )
         
         self.subset_percentage = subset_percentage
         self.train_percent = train_percent
