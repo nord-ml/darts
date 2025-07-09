@@ -56,7 +56,7 @@ def run_training(model_name: str, target_component: str, output_dir: str, n_tria
 
     print(f"--- Tuning complete for {run_id} ---")
     print(f"Best trial: {study.best_trial.number}")
-    print(f"  Validation SMAPE: {study.best_value:.4f}")
+    print(f"  Validation IES: {study.best_value:.4f}")
     print(f"  Best Params: {study.best_params}")
 
     # 5. Save Results (Hyperparameters and Study Object)

@@ -7,6 +7,7 @@ from functools import partial
 import torch
 from pytorch_lightning.callbacks import EarlyStopping, Callback
 from optuna.integration import PyTorchLightningPruningCallback
+from optuna.trial import Trial
 
 from darts.models import TFTModel, Prophet
 from darts.models import TFTSSMModel
@@ -22,7 +23,7 @@ class PatchedPruningCallback(PyTorchLightningPruningCallback, Callback):
 
 #  ---- Fitters - used once we have trined the model
 # NR epochs for hyperparam finetuning and for fitting final model
-NR_EPOCHS = 1 #TODO ADAPT!
+NR_EPOCHS = 20 #TODO ADAPT!
 
 if NR_EPOCHS < 5:
     print("❗❗Warning: NR_EPOCHS is set to less than 5, this will not train the model properly. Please set it to a positive integer.❗❗")
@@ -133,7 +134,9 @@ def _historical_predictor(
     )
 # --- Objective Functions - for training ---
 
-def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
+def _tftssm_objective(trial:Trial, data_pipeline:ElectricityDataPipeline):
+    """
+    # Old params tested
     # This function remains the same as before...
     in_len = trial.suggest_int("input_chunk_length", 12, 36)
     hidden_size = trial.suggest_categorical("hidden_size", [32, 64])
@@ -141,6 +144,15 @@ def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
     d_state = trial.suggest_int("d_state", 32, 128)
     expand = trial.suggest_int("expand", 1, 4)
     d_conv = trial.suggest_int("d_conv", 2, 8)
+    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    """
+    # This function remains the same as before...
+    in_len = trial.suggest_categorical("input_chunk_length", [8, 16, 32, 64])
+    hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 128])
+    dropout = trial.suggest_float("dropout", 0.0, 0.3, step=0.01)
+    d_state = trial.suggest_categorical("d_state", [16, 32, 64, 128])
+    expand = trial.suggest_categorical("expand", [2, 4, 8, 16])
+    d_conv = trial.suggest_categorical("d_conv", [1, 2, 3])
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
 
     callbacks = [PatchedPruningCallback(trial, monitor="val_loss"), EarlyStopping("val_loss", patience=3, verbose=False)]
@@ -158,7 +170,8 @@ def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
     )
 
 
-    model.fit(
+    start_time = time.time()
+    model_hist = model.fit(
         series=data_pipeline.train_scaled, 
         past_covariates=data_pipeline.cov_train_scaled,
         future_covariates=data_pipeline.future_covariates_scaled,
@@ -168,6 +181,8 @@ def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
         val_future_covariates=data_pipeline.future_covariates_scaled,
         verbose=True,        
     )
+    execution_time = time.time() - start_time
+    normalized_time = execution_time/model_hist.epochs_trained
 
     best_model = TFTSSMModel.load_from_checkpoint(f"optuna_tftssm_{trial._trial_id}", best=True)
 
@@ -177,16 +192,27 @@ def _tftssm_objective(trial, data_pipeline:ElectricityDataPipeline):
         actual_series=data_pipeline.val_scaled,
         val_series=data_pipeline.val_scaled, 
         future_covariates=data_pipeline.future_covariates_scaled,
-        past_covariates=data_pipeline.cov_val_scaled
+        past_covariates=data_pipeline.cov_val_scaled,
+        epochs_trained=model_hist.epochs_trained,
+        normalized_execution_time=normalized_time,
     )
 
     
 def _tft_objective(trial, data_pipeline:ElectricityDataPipeline):
+    """
     # This function remains the same as before...
     in_len = trial.suggest_int("input_chunk_length", 12, 36)
     hidden_size = trial.suggest_categorical("hidden_size", [32, 64])
     dropout = trial.suggest_float("dropout", 0.0, 0.3)
     heads = trial.suggest_categorical("num_attention_heads", [1, 2, 4])
+    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    """
+
+    # This function remains the same as before...
+    in_len = trial.suggest_categorical("input_chunk_length", [8, 16, 32, 64])
+    hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 128])
+    dropout = trial.suggest_float("dropout", 0.0, 0.3, step=0.01)
+    heads = trial.suggest_categorical("num_attention_heads", [1, 2, 4, 8])
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
 
 
@@ -203,7 +229,8 @@ def _tft_objective(trial, data_pipeline:ElectricityDataPipeline):
     )
 
 
-    model.fit(
+    start_time = time.time()
+    model_hist = model.fit(
         series=data_pipeline.train_scaled, 
         past_covariates=data_pipeline.cov_train_scaled,
         future_covariates=data_pipeline.future_covariates_scaled,
@@ -213,6 +240,8 @@ def _tft_objective(trial, data_pipeline:ElectricityDataPipeline):
         val_future_covariates=data_pipeline.future_covariates_scaled,
         verbose=True
     )
+    execution_time = time.time() - start_time
+    normalized_time = execution_time/model_hist.epochs_trained
 
     best_model = TFTModel.load_from_checkpoint(f"optuna_tft_{trial._trial_id}", best=True)
 
@@ -221,7 +250,9 @@ def _tft_objective(trial, data_pipeline:ElectricityDataPipeline):
         actual_series=data_pipeline.val_scaled,
         val_series=data_pipeline.val_scaled, 
         future_covariates=data_pipeline.future_covariates_scaled,
-        past_covariates=data_pipeline.cov_val_scaled
+        past_covariates=data_pipeline.cov_val_scaled,
+        epochs_trained=model_hist.epochs_trained,
+        normalized_execution_time=normalized_time,
     )
 
 def _prophet_objective(trial, data_pipeline:ElectricityDataPipeline):
@@ -235,10 +266,14 @@ def _prophet_objective(trial, data_pipeline:ElectricityDataPipeline):
         seasonality_mode=seasonality_mode,
         add_seasonalities={'name': 'monthly', 'seasonal_periods': monthly_seasonality_in_hours, 'fourier_order': 5},
     )
-    model.fit(series=data_pipeline.train_scaled, 
+
+    start_time = time.time()
+    model_hist = model.fit(series=data_pipeline.train_scaled, 
             #   past_covariates=data_pipeline.cov_train_scaled,
             future_covariates=data_pipeline.future_covariates_scaled,
         )
+    execution_time = time.time() - start_time
+    normalized_time = execution_time # prophet has no model_hist.epochs_trained, so this is already normalized
 
     # this is maybe no needed we evaulte them in separate step
     return eval_model(
@@ -246,7 +281,10 @@ def _prophet_objective(trial, data_pipeline:ElectricityDataPipeline):
         actual_series=data_pipeline.val_scaled,
         val_series=data_pipeline.val_scaled, 
         past_covariates=[], # no past covariates, cannot accept them
-        future_covariates=data_pipeline.future_covariates_scaled
+        future_covariates=data_pipeline.future_covariates_scaled,
+        normalized_execution_time=normalized_time,
+        epochs_trained=None,
+        training_series=data_pipeline.train_scaled,
     )
 
 # --- The Main Configuration Dictionary ---
