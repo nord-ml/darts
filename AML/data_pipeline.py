@@ -17,7 +17,7 @@ class ElectricityDataPipeline:
     def __init__(
         self,
         target_component: str = "Value_NE5",
-        subset_percentage: float = 0.01, #use it for now to make it as fast as possible in DEV
+        subset_percentage: float = 1, #use it for now to make it as fast as possible in DEV # 30% for hyper-parameter optimization 100% for model comparison
         train_percent: float = 0.65,
         val_percent: float = 0.15,
     ):
