@@ -1,0 +1,15 @@
+{
+    "model_name": "tft",
+    "target_component": "Value_NE5",
+    "test_smape": 9.411283493041992,
+    "accuracy_rate": 0.9058871865272522,
+    "training_time_seconds": 2444.906779527664,
+    "inverse_efficiency_score": 2698.90869140625,
+    "rate_correct_score": 0.00037052013794891536,
+    "best_hyperparameters": {
+        "input_chunk_length": 16,
+        "hidden_size": 128,
+        "dropout": 0.25,
+        "num_attention_heads": 2
+    }
+}

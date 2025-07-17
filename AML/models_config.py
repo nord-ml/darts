@@ -122,16 +122,24 @@ def _historical_predictor(
     # all full future covariates
     full_future_covs = data_pipeline.future_covariates_scaled
 
-    return model.historical_forecasts(
-        series=full_series,
-        past_covariates=full_past_covs,
-        future_covariates=full_future_covs,
-        start=data_pipeline.test_scaled.start_time(),  # Start forecasting at the beginning of the test set
-        forecast_horizon=data_pipeline.forecast_horizon,
-        stride=data_pipeline.forecast_horizon,  # Creates non-overlapping forecasts
-        retrain=False,
-        verbose=True,
-    )
+    if model.supports_optimized_historical_forecasts:
+        prediction = model.historical_forecasts(
+            series=full_series,
+            past_covariates=full_past_covs,
+            future_covariates=full_future_covs,
+            start=data_pipeline.test_scaled.start_time(),  # Start forecasting at the beginning of the test set
+            forecast_horizon=data_pipeline.forecast_horizon,
+            stride=data_pipeline.forecast_horizon,  # Creates non-overlapping forecasts
+            retrain=False,
+            verbose=True,
+        )
+    else:
+        print("Model doesn't support optimized historical forecast.")
+        test_ts = data_pipeline.test_scaled
+
+        prediction = model.predict(len(test_ts))
+
+    return prediction
 # --- Objective Functions - for training ---
 
 def _tftssm_objective(trial:Trial, data_pipeline:ElectricityDataPipeline):

@@ -1,0 +1,17 @@
+{
+    "model_name": "ssm-tft",
+    "target_component": "Value_NE5",
+    "test_smape": 10.69426441192627,
+    "accuracy_rate": 0.8930573463439941,
+    "training_time_seconds": 2150.854432582855,
+    "inverse_efficiency_score": 2408.4169921875,
+    "rate_correct_score": 0.00041521049570292234,
+    "best_hyperparameters": {
+        "input_chunk_length": 16,
+        "hidden_size": 32,
+        "dropout": 0.14,
+        "d_state": 16,
+        "expand": 16,
+        "d_conv": 1
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "model_name": "tft",
+    "target_component": "Value_NE5",
+    "best_validation_value": 29.1492919921875,
+    "best_params": {
+        "input_chunk_length": 16,
+        "hidden_size": 128,
+        "dropout": 0.25,
+        "num_attention_heads": 2,
+        "lr": 0.0002486566712127507
+    },
+    "n_trials_completed": 25
+}

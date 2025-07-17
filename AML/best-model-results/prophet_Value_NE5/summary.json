@@ -1,0 +1,11 @@
+{
+    "model_name": "prophet",
+    "target_component": "Value_NE5",
+    "best_validation_value": 13.608879233656182,
+    "best_params": {
+        "seasonality_mode": "additive",
+        "changepoint_prior_scale": 0.010785544447274151,
+        "seasonality_prior_scale": 2.9083269883900615
+    },
+    "n_trials_completed": 25
+}

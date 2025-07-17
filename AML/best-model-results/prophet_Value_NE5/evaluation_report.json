@@ -1,0 +1,14 @@
+{
+    "model_name": "prophet",
+    "target_component": "Value_NE5",
+    "test_smape": 36.22007317821106,
+    "accuracy_rate": 0.6377992682178895,
+    "training_time_seconds": 87.38111567497253,
+    "inverse_efficiency_score": 137.00410149282388,
+    "rate_correct_score": 0.00729905155468925,
+    "best_hyperparameters": {
+        "seasonality_mode": "additive",
+        "changepoint_prior_scale": 0.010785544447274151,
+        "seasonality_prior_scale": 2.9083269883900615
+    }
+}
